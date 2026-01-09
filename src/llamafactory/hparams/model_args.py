@@ -201,6 +201,26 @@ class BaseModelArguments:
         default=False,
         metadata={"help": "Whether to trust the execution of code from datasets/models defined on the Hub or not."},
     )
+    use_reasoner: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to use the custom reasoner enhancement."},
+    )
+    reasoner_nhead: int | None = field(
+        default=None,
+        metadata={"help": "Number of attention heads for the reasoner. Defaults to model config."},
+    )
+    reasoner_ffn_size: int | None = field(
+        default=None,
+        metadata={"help": "Dimension of the feed-forward network for the reasoner. Defaults to model config."},
+    )
+    reasoner_layers: int = field(
+        default=1,
+        metadata={"help": "Number of layers for the reasoner. Defaults to 1."},
+    )
+    reasoner_dropout: float = field(
+        default=0.1,
+        metadata={"help": "Dropout rate for the reasoner. Defaults to 0.1."},
+    )
 
     def __post_init__(self):
         if self.model_name_or_path is None:

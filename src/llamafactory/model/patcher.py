@@ -172,6 +172,44 @@ def patch_config(
             init_kwargs["offload_folder"] = model_args.offload_folder
 
 
+def patch_reasoner(model: "PreTrainedModel", model_args: "ModelArguments") -> None:
+    if not model_args.use_reasoner:
+        return
+
+    from torch import nn
+
+    logger.info_rank0("Patching model with custom reasoner.")
+    d_model = model.config.hidden_size
+    nhead = model_args.reasoner_nhead or getattr(model.config, "num_attention_heads", 12)
+    dim_feedforward = model_args.reasoner_ffn_size or getattr(model.config, "intermediate_size", 4096)
+
+    model.reasoner = nn.TransformerEncoder(
+        nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=model_args.reasoner_dropout,
+            batch_first=True,
+        ),
+        num_layers=model_args.reasoner_layers,
+    ).to(model.device, dtype=model.dtype)
+
+    old_forward = model.forward
+
+    def new_forward(self, *args, **kwargs):
+        kwargs["output_hidden_states"] = True
+        outputs = old_forward(*args, **kwargs)
+        if hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
+            last_hidden_state = outputs.hidden_states[-1]
+            reasoned_hidden_state = self.reasoner(last_hidden_state)
+            logits = self.lm_head(reasoned_hidden_state)
+            outputs.logits = logits
+
+        return outputs
+
+    model.forward = MethodType(new_forward, model)
+
+
 def patch_model(
     model: "PreTrainedModel",
     tokenizer: "PreTrainedTokenizer",
@@ -207,6 +245,7 @@ def patch_model(
         if getattr(model.config, "model_type", None) == "gemma3n":
             setattr(model_args, "disable_gradient_checkpointing", True)
 
+        patch_reasoner(model, model_args)
         prepare_model_for_training(model, model_args)
         autocast_projector_dtype(model, model_args)
         add_z3_leaf_module(model)
