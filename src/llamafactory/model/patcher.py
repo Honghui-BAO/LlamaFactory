@@ -202,7 +202,8 @@ def patch_reasoner(model: "PreTrainedModel", model_args: "ModelArguments") -> No
         if hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
             last_hidden_state = outputs.hidden_states[-1]
             reasoned_hidden_state = self.reasoner(last_hidden_state)
-            logits = self.lm_head(reasoned_hidden_state)
+            combined_hidden_state = (last_hidden_state + reasoned_hidden_state) / 2.0
+            logits = self.lm_head(combined_hidden_state)
             outputs.logits = logits
 
         return outputs
