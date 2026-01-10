@@ -219,6 +219,8 @@ def patch_reasoner(model: "PreTrainedModel", model_args: "ModelArguments") -> No
     else:
         logger.info_rank0(f"Memory-efficient reasoner patch applied to {type(base_model).__name__}")
         old_base_forward = base_model.forward
+        reasoner = model.reasoner
+        
         def new_base_forward(self, *args, **kwargs):
             outputs = old_base_forward(*args, **kwargs)
             if isinstance(outputs, tuple):
@@ -226,7 +228,8 @@ def patch_reasoner(model: "PreTrainedModel", model_args: "ModelArguments") -> No
             else:
                 last_hidden = getattr(outputs, "last_hidden_state", outputs[0])
             
-            reasoned = self.parent_model.reasoner(last_hidden)
+            # 使用闭包引用的 reasoner，避免循环引用
+            reasoned = reasoner(last_hidden)
             combined = (last_hidden + reasoned) / 2.0
             
             if isinstance(outputs, tuple):
@@ -236,7 +239,6 @@ def patch_reasoner(model: "PreTrainedModel", model_args: "ModelArguments") -> No
                 return outputs
 
         base_model.forward = MethodType(new_base_forward, base_model)
-        base_model.parent_model = model
 
 
 def patch_model(
