@@ -194,21 +194,49 @@ def patch_reasoner(model: "PreTrainedModel", model_args: "ModelArguments") -> No
         num_layers=model_args.reasoner_layers,
     ).to(model.device, dtype=model.dtype)
 
-    old_forward = model.forward
+    from types import MethodType
+    
+    # 获取基础模型（transformer部分）
+    base_model = getattr(model, model.base_model_prefix, None)
+    if base_model is None:
+        # 兼容性处理
+        base_model = getattr(model, "model", None) or getattr(model, "transformer", None)
+    
+    if base_model is None:
+        logger.warning_rank0("Could not find base model for reasoner patching. Falling back to top-level forward patch.")
+        old_forward = model.forward
+        def new_forward(self, *args, **kwargs):
+            kwargs["output_hidden_states"] = True
+            outputs = old_forward(*args, **kwargs)
+            if hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
+                last_hidden_state = outputs.hidden_states[-1]
+                reasoned_hidden_state = self.reasoner(last_hidden_state)
+                combined_hidden_state = (last_hidden_state + reasoned_hidden_state) / 2.0
+                logits = self.lm_head(combined_hidden_state)
+                outputs.logits = logits
+            return outputs
+        model.forward = MethodType(new_forward, model)
+    else:
+        logger.info_rank0(f"Memory-efficient reasoner patch applied to {type(base_model).__name__}")
+        old_base_forward = base_model.forward
+        def new_base_forward(self, *args, **kwargs):
+            outputs = old_base_forward(*args, **kwargs)
+            if isinstance(outputs, tuple):
+                last_hidden = outputs[0]
+            else:
+                last_hidden = getattr(outputs, "last_hidden_state", outputs[0])
+            
+            reasoned = self.parent_model.reasoner(last_hidden)
+            combined = (last_hidden + reasoned) / 2.0
+            
+            if isinstance(outputs, tuple):
+                return (combined,) + outputs[1:]
+            else:
+                outputs.last_hidden_state = combined
+                return outputs
 
-    def new_forward(self, *args, **kwargs):
-        kwargs["output_hidden_states"] = True
-        outputs = old_forward(*args, **kwargs)
-        if hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
-            last_hidden_state = outputs.hidden_states[-1]
-            reasoned_hidden_state = self.reasoner(last_hidden_state)
-            combined_hidden_state = (last_hidden_state + reasoned_hidden_state) / 2.0
-            logits = self.lm_head(combined_hidden_state)
-            outputs.logits = logits
-
-        return outputs
-
-    model.forward = MethodType(new_forward, model)
+        base_model.forward = MethodType(new_base_forward, base_model)
+        base_model.parent_model = model
 
 
 def patch_model(
