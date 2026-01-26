@@ -2,7 +2,7 @@ import os
 import torch
 import torch.distributed as dist
 import socket
-import time
+import datetime
 
 def sync_mpi_env():
     # Comprehensive Mapping for multi-vendor MPI and Schedulers
@@ -41,7 +41,7 @@ def test_connectivity():
         dist.init_process_group(
             backend="nccl",
             init_method="env://",
-            timeout=time.timedelta(seconds=600)
+            timeout=datetime.timedelta(seconds=600)
         )
         
         # Simple All-Reduce test
