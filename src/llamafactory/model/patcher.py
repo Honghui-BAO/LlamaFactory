@@ -192,7 +192,10 @@ def patch_reasoner(model: "PreTrainedModel", model_args: "ModelArguments") -> No
             batch_first=True,
         ),
         num_layers=model_args.reasoner_layers,
-    ).to(model.device, dtype=model.dtype)
+    )
+    
+    # Ensure reasoner is on the same device and dtype as the model
+    model.reasoner.to(model.device, dtype=model.dtype)
 
     from types import MethodType
     
