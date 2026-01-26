@@ -36,15 +36,15 @@ mpirun --allow-run-as-root \
     -x LD_LIBRARY_PATH="$CONDA_ENV_PATH/lib:$LD_LIBRARY_PATH" \
     -x PYTHONPATH="$CONDA_ENV_PATH/lib/python3.11/site-packages:$PYTHONPATH" \
     bash -c '
-        if [ -n "$OMPI_COMM_WORLD_RANK" ]; then
-            export RANK=$OMPI_COMM_WORLD_RANK
-            export LOCAL_RANK=$OMPI_COMM_WORLD_LOCAL_RANK
-            export WORLD_SIZE=$OMPI_COMM_WORLD_SIZE
-        elif [ -n "$PMI_RANK" ]; then
-            export RANK=$PMI_RANK
-            export LOCAL_RANK=$PMI_LOCALRANKID
-            export WORLD_SIZE=$PMI_SIZE
-        fi
+        # Robust rank detection from common MPI/cluster variables
+        export RANK=${OMPI_COMM_WORLD_RANK:-${PMI_RANK:-${SLURM_PROCID:-0}}}
+        export LOCAL_RANK=${OMPI_COMM_WORLD_LOCAL_RANK:-${PMI_LOCALRANKID:-${SLURM_LOCALID:-0}}}
+        export WORLD_SIZE=${OMPI_COMM_WORLD_SIZE:-${PMI_SIZE:-${SLURM_NTASKS:-1}}}
+        
+        # Set the current device to avoid confusion
+        export CUDA_VISIBLE_DEVICES=$LOCAL_RANK
+        
+        echo "Rank $RANK on Local Rank $LOCAL_RANK (World Size $WORLD_SIZE) on $(hostname)"
         
         $PYTHON_EXE -u src/train.py \
             --deepspeed examples/deepspeed/ds_z2_config.json \
@@ -67,5 +67,6 @@ mpirun --allow-run-as-root \
             --learning_rate 1e-4 \
             --num_train_epochs 3.0 \
             --plot_loss \
-            --bf16
+            --bf16 \
+            --local_rank $LOCAL_RANK
     '
