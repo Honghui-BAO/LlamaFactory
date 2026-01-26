@@ -28,10 +28,13 @@ mpirun --allow-run-as-root \
     --hostfile $HOSTFILE \
     -x http_proxy -x https_proxy -x no_proxy \
     -x MASTER_ADDR=$MASTER_ADDR -x MASTER_PORT=$MASTER_PORT \
-    -x NCCL_DEBUG=WARN \
+    -x NCCL_DEBUG=INFO \
     -x NCCL_SOCKET_IFNAME=eth01 \
     -x NCCL_IB_HCA=mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8 \
     -x NCCL_IB_GID_INDEX=3 \
+    -x TORCH_NCCL_ENABLE_MONITORING=0 \
+    -x TORCH_DISTRIBUTED_DEBUG=DETAIL \
+    -x TORCH_NCC_ASYNC_ERROR_HANDLING=1 \
     -x PATH="$CONDA_ENV_PATH/bin:$PATH" \
     -x LD_LIBRARY_PATH="$CONDA_ENV_PATH/lib:$LD_LIBRARY_PATH" \
     -x PYTHONPATH="$CONDA_ENV_PATH/lib/python3.11/site-packages:$PYTHONPATH" \
