@@ -7,7 +7,7 @@ MASTER_PORT=12345
 
 # Paths
 model_path=/llm-reco-ssd-share/zhangzixing/onerec_pretrain/model_output/pro/sft/8b_v0.1.0_fromstg2_noamazon/step6500/global_step6500/converted
-output_dir=/llm-reco-ssd-share/baohonghui/Reference/torchrec/SumRec/merge/ckpt/rmdr_v15_0_single_avg
+output_dir=/llm-reco-ssd-share/baohonghui/Reference/torchrec/SumRec/merge/ckpt/rmdr_v15_0_single_avg_mpi
 
 # Environment (Based on your RMDR MPI setup)
 CONDA_ENV_PATH="/root/miniconda3/envs/rrec"
