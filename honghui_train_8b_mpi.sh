@@ -23,28 +23,46 @@ echo "OUTPUT: $output_dir"
 echo "--------------------------------------"
 
 # Multi-Node Launch using mpirun
-# We use a bash wrapper to map MPI rank variables to PyTorch/Transformers environment variables
+# We use the cluster's optimized flags and a bash wrapper for rank mapping
 mpirun --allow-run-as-root \
     --hostfile $HOSTFILE \
+    -mca opal_set_max_sys_limits 1 \
+    -mca btl_openib_allow_ib false \
+    -mca plm_rsh_num_concurrent 600 \
+    -mca routed_radix 600 \
+    -mca pml ob1 \
+    -mca btl self,tcp \
+    -mca oob_tcp_if_include eth01 \
+    -mca btl_tcp_if_include eth01 \
     -x http_proxy -x https_proxy -x no_proxy \
     -x MASTER_ADDR=$MASTER_ADDR -x MASTER_PORT=$MASTER_PORT \
     -x NCCL_DEBUG=WARN \
     -x NCCL_SOCKET_IFNAME=eth01 \
     -x NCCL_IB_HCA=mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8 \
     -x NCCL_IB_GID_INDEX=3 \
+    -x OMPI_MCA_btl=self,tcp \
+    -x NCCL_NET_PLUGIN=none \
+    -x OMPI_MCA_btl_openib_allow_ib=false \
+    -x OMPI_MCA_oob_tcp_if_include=eth01 \
+    -x OMPI_MCA_pml=ob1 \
+    -x NCCL_IB_TIMEOUT=20 \
+    -x NCCL_IB_DISABLE=0 \
+    -x OMPI_MCA_btl_tcp_if_include=eth01 \
+    -x NCCL_NET_OVERHEAD=1000 \
+    -x NCCL_IB_QPS_PER_CONNECTION=4 \
     -x PATH="$CONDA_ENV_PATH/bin:$PATH" \
     -x LD_LIBRARY_PATH="$CONDA_ENV_PATH/lib:$LD_LIBRARY_PATH" \
     -x PYTHONPATH="$CONDA_ENV_PATH/lib/python3.11/site-packages:$PYTHONPATH" \
-    bash -c '
-        # Robust rank detection from common MPI/cluster variables
-        export RANK=${OMPI_COMM_WORLD_RANK:-${PMI_RANK:-${SLURM_PROCID:-0}}}
-        export LOCAL_RANK=${OMPI_COMM_WORLD_LOCAL_RANK:-${PMI_LOCALRANKID:-${SLURM_LOCALID:-0}}}
-        export WORLD_SIZE=${OMPI_COMM_WORLD_SIZE:-${PMI_SIZE:-${SLURM_NTASKS:-1}}}
+    with_nccl_local_env bash -c '
+        # Map MPI rank variables to PyTorch variables
+        export RANK=${OMPI_COMM_WORLD_RANK:-0}
+        export LOCAL_RANK=${OMPI_COMM_WORLD_LOCAL_RANK:-0}
+        export WORLD_SIZE=${OMPI_COMM_WORLD_SIZE:-1}
         
-        # Set the current device to avoid confusion
+        # Explicitly set CUDA_VISIBLE_DEVICES to the local rank
         export CUDA_VISIBLE_DEVICES=$LOCAL_RANK
         
-        echo "Rank $RANK on Local Rank $LOCAL_RANK (World Size $WORLD_SIZE) on $(hostname)"
+        echo "Rank $RANK (Local $LOCAL_RANK) starting on $(hostname)"
         
         $PYTHON_EXE -u src/train.py \
             --deepspeed examples/deepspeed/ds_z2_config.json \
