@@ -5,18 +5,37 @@ import socket
 import datetime
 
 def sync_mpi_env():
+    import os
     # Comprehensive Mapping for multi-vendor MPI and Schedulers
     mapping = {
         "RANK": ["OMPI_COMM_WORLD_RANK", "PMI_RANK", "SLURM_PROCID", "MV2_COMM_WORLD_RANK"],
         "LOCAL_RANK": ["OMPI_COMM_WORLD_LOCAL_RANK", "PMI_LOCALRANKID", "SLURM_LOCALID", "MV2_COMM_WORLD_LOCAL_RANK"],
         "WORLD_SIZE": ["OMPI_COMM_WORLD_SIZE", "PMI_SIZE", "SLURM_NTASKS", "MV2_COMM_WORLD_SIZE"],
     }
+    found_mpi = False
     for std_var, mpi_vars in mapping.items():
         if std_var not in os.environ:
             for mpi_var in mpi_vars:
                 if mpi_var in os.environ:
                     os.environ[std_var] = os.environ[mpi_var]
+                    found_mpi = True
                     break
+    
+    if not found_mpi and "RANK" not in os.environ:
+        print("!!! WARNING: No MPI environment variables detected. Running in LOCAL MODE (Rank 0, World Size 1) !!!")
+        os.environ["RANK"] = "0"
+        os.environ["LOCAL_RANK"] = "0"
+        os.environ["WORLD_SIZE"] = "1"
+        os.environ["MASTER_ADDR"] = "127.0.0.1"
+        os.environ["MASTER_PORT"] = "12345"
+    
+    if int(os.environ.get("LOCAL_RANK", 0)) == 0:
+        print(f"--- NCCL Test Env ---")
+        print(f"RANK: {os.environ.get('RANK')}")
+        print(f"LOCAL_RANK: {os.environ.get('LOCAL_RANK')}")
+        print(f"WORLD_SIZE: {os.environ.get('WORLD_SIZE')}")
+        print(f"MASTER: {os.environ.get('MASTER_ADDR')}:{os.environ.get('MASTER_PORT')}")
+        print(f"---------------------")
 
 def test_connectivity():
     sync_mpi_env()
