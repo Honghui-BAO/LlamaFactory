@@ -17,18 +17,27 @@ from llamafactory.train.tuner import run_exp
 
 
 def sync_mpi_env():
-    # Mapping MPI env vars to standard ones
+    # Comprehensive Mapping for multi-vendor MPI and Schedulers
     mapping = {
-        "OMPI_COMM_WORLD_RANK": "RANK",
-        "OMPI_COMM_WORLD_LOCAL_RANK": "LOCAL_RANK",
-        "OMPI_COMM_WORLD_SIZE": "WORLD_SIZE",
-        "PMI_RANK": "RANK",
-        "PMI_LOCALRANKID": "LOCAL_RANK",
-        "PMI_SIZE": "WORLD_SIZE",
+        "RANK": ["OMPI_COMM_WORLD_RANK", "PMI_RANK", "SLURM_PROCID", "MV2_COMM_WORLD_RANK"],
+        "LOCAL_RANK": ["OMPI_COMM_WORLD_LOCAL_RANK", "PMI_LOCALRANKID", "SLURM_LOCALID", "MV2_COMM_WORLD_LOCAL_RANK"],
+        "WORLD_SIZE": ["OMPI_COMM_WORLD_SIZE", "PMI_SIZE", "SLURM_NTASKS", "MV2_COMM_WORLD_SIZE"],
     }
-    for mpi_var, std_var in mapping.items():
-        if mpi_var in os.environ and std_var not in os.environ:
-            os.environ[std_var] = os.environ[mpi_var]
+    for std_var, mpi_vars in mapping.items():
+        if std_var not in os.environ:
+            for mpi_var in mpi_vars:
+                if mpi_var in os.environ:
+                    os.environ[std_var] = os.environ[mpi_var]
+                    break
+    
+    # Log the detected environment to stdout for debugging
+    if int(os.environ.get("LOCAL_RANK", 0)) == 0:
+        print(f"--- MPI Env Sync (Rank 0 on Node) ---")
+        print(f"RANK: {os.environ.get('RANK')}")
+        print(f"LOCAL_RANK: {os.environ.get('LOCAL_RANK')}")
+        print(f"WORLD_SIZE: {os.environ.get('WORLD_SIZE')}")
+        print(f"MASTER_ADDR: {os.environ.get('MASTER_ADDR')}")
+        print(f"--------------------------------------")
 
 
 def main():
