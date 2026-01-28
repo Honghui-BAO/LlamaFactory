@@ -14,7 +14,15 @@
 """Qwen3 model configuration"""
 
 from transformers import PretrainedConfig
-from transformers.modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+try:
+    from transformers.modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
+except ImportError:
+    from typing import Any, Dict, TypedDict
+    class RopeParameters(TypedDict, total=False):
+        rope_type: str
+        rope_theta: float
+    class RotaryEmbeddingConfigMixin:
+        pass
 from transformers.utils import logging
 
 def layer_type_validation(layer_types, num_hidden_layers):

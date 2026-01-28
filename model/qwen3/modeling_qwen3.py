@@ -50,7 +50,11 @@ from transformers.modeling_layers import (
     GenericForTokenClassification,
     GradientCheckpointingLayer,
 )
-from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+try:
+    from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+except ImportError:
+    ROPE_INIT_FUNCTIONS = {}
+    def dynamic_rope_update(fun): return fun
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 try:
     from transformers.processing_utils import Unpack
