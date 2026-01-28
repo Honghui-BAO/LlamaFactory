@@ -14,9 +14,14 @@
 """Qwen3 model configuration"""
 
 from transformers import PretrainedConfig
-from transformers.configuration_utils import layer_type_validation
 from transformers.modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from transformers.utils import logging
+
+def layer_type_validation(layer_types, num_hidden_layers):
+    if layer_types is not None and len(layer_types) != num_hidden_layers:
+        raise ValueError(
+            f"The length of layer_types ({len(layer_types)}) must be equal to the number of hidden layers ({num_hidden_layers})."
+        )
 
 
 logger = logging.get_logger(__name__)
