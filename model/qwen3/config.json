@@ -9,7 +9,7 @@
         "AutoModelForCausalLM": "modeling_qwen3.Qwen3ForCausalLMCustom"
     },
     "torch_dtype": "bfloat16",
-    "vocab_size": 151936,
+    "vocab_size": 176384,
     "hidden_size": 4096,
     "intermediate_size": 22016,
     "num_hidden_layers": 32,
