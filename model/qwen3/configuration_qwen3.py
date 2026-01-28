@@ -13,7 +13,7 @@
 # limitations under the License.
 """Qwen3 model configuration"""
 
-from transformers import PreTrainedConfig
+from transformers import PretrainedConfig
 from transformers.configuration_utils import layer_type_validation
 from transformers.modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from transformers.utils import logging
@@ -22,7 +22,7 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Qwen3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class Qwen3Config(PretrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3Model`]. It is used to instantiate a
     Qwen3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
