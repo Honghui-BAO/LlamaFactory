@@ -13,7 +13,8 @@
 # limitations under the License.
 """Qwen3 model configuration"""
 
-from transformers.configuration_utils import PreTrainedConfig, layer_type_validation
+from transformers import PreTrainedConfig
+from transformers.configuration_utils import layer_type_validation
 from transformers.modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from transformers.utils import logging
 
