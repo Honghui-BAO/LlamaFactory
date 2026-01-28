@@ -124,6 +124,7 @@ except ImportError:
     def maybe_autocast(*args, **kwargs):
         yield
 from .configuration_qwen3 import Qwen3Config
+print(f"DEBUG: Loaded Qwen3Config: {Qwen3Config}")
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -423,7 +424,7 @@ class Qwen3DecoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Qwen3PreTrainedModel(PreTrainedModel):
-    config: Qwen3Config
+    config_class = Qwen3Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen3DecoderLayer"]
@@ -442,6 +443,7 @@ class Qwen3PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Qwen3Model(Qwen3PreTrainedModel):
+    config_class = Qwen3Config
     def __init__(self, config: Qwen3Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -533,6 +535,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
 
 @auto_docstring
 class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
+    config_class = Qwen3Config
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
@@ -595,6 +598,19 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
+
+        # ==============================================================
+        # 🧪 CUSTOM MODIFICATION TEMPLATE START
+        # ==============================================================
+        if getattr(self.config, "use_custom_logic", False):
+            # Dummy operation for verification
+            # You can inject your logic here, e.g., modifying hidden_states before lm_head
+            print("DEBUG: Applying custom logic to hidden_states")
+            hidden_states = hidden_states * 1.0  # replace with your modification
+        # ==============================================================
+        # 🧪 CUSTOM MODIFICATION TEMPLATE END
+        # ==============================================================
+
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -612,6 +628,16 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
         )
 
 
+class Qwen3ForCausalLMCustom(Qwen3ForCausalLM):
+    """
+    A custom wrapper for Qwen3ForCausalLM to avoid direct modification to the base class
+    if preferred, but here we've added the hook directly to the base class above as well.
+    """
+    def forward(self, *args, **kwargs):
+        # Implementation is inherited or overridden
+        return super().forward(*args, **kwargs)
+
+
 class Qwen3ForSequenceClassification(GenericForSequenceClassification, Qwen3PreTrainedModel):
     pass
 
@@ -626,6 +652,7 @@ class Qwen3ForQuestionAnswering(GenericForQuestionAnswering, Qwen3PreTrainedMode
 
 __all__ = [
     "Qwen3ForCausalLM",
+    "Qwen3ForCausalLMCustom",
     "Qwen3ForQuestionAnswering",
     "Qwen3PreTrainedModel",
     "Qwen3Model",

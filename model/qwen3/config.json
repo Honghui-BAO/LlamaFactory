@@ -1,11 +1,12 @@
 {
     "architectures": [
-        "Qwen3ForCausalLM"
+        "Qwen3ForCausalLMCustom"
     ],
     "model_type": "qwen3",
+    "use_custom_logic": true,
     "auto_map": {
         "AutoConfig": "configuration_qwen3.Qwen3Config",
-        "AutoModelForCausalLM": "modeling_qwen3.Qwen3ForCausalLM"
+        "AutoModelForCausalLM": "modeling_qwen3.Qwen3ForCausalLMCustom"
     },
     "torch_dtype": "bfloat16",
     "vocab_size": 151936,
