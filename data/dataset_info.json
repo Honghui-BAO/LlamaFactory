@@ -1,4 +1,7 @@
 {
+  "amazon_sft_v2": {
+    "file_name": "/Users/honghuibao/Desktop/Work/torchrec/lr/data/Amazon_10/reproduce_rz/amazon_merged_sft_data_meta2identifier_v2.json"
+  },
   "identity": {
     "file_name": "identity.json"
   },

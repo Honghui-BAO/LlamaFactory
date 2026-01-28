@@ -8,7 +8,7 @@ MASTER_PORT=12345
 # Paths (Updated per user request)
 model_path=/llm-reco-ssd-share/zhangzixing/onerec_pretrain/model_output/pro/sft/8b_v0.1.0_fromstg2_noamazon/step6500/global_step6500/converted
 output_dir=/llm-reco-ssd-share/baohonghui/Reference/torchrec/SumRec/merge/ckpt/rmdr_v15_0_single_avg_mpi_v2
-
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 # Print Configuration
 echo "--------------------------------------"
 echo "LlamaFactory MPI Training Launch (128 Ranks)"
@@ -22,13 +22,22 @@ mpirun --allow-run-as-root \
     --hostfile $HOSTFILE \
     -x http_proxy -x https_proxy -x no_proxy \
     -x MASTER_ADDR=$MASTER_ADDR -x MASTER_PORT=$MASTER_PORT \
+    -x LD_LIBRARY_PATH=$LIBRARY_PATH \
+    -x NCCL_IB_QPS_PER_CONNECTION=2 \
+    -x NCCL_IB_DISABLE=0 \
+    -x NCCL_ALGO=^NVLS,NVLSTree \
+    -x LD_PRELOAD=/llm-reco-ssd-share/luoxinchen/libs/libnccl.so.2.21.5.noece.cpu \
     -x NCCL_DEBUG=INFO \
+    -x NCCL_NVLS_ENABLE=0\
     -x NCCL_SOCKET_IFNAME=eth01 \
     -x NCCL_IB_HCA=mlx5 \
+    -x NCCL_PXN_DISABLE=0 \
+    -x NCCL_IB_ECE_ENABLE=0\
     -x NCCL_IB_GID_INDEX=3 \
     -x TORCH_NCCL_ENABLE_MONITORING=1 \
     -x TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC=3600 \
     -x TORCH_DISTRIBUTED_DEBUG=DETAIL \
+    -x NCCL_ASYNC_ERROR_HANDLING=1 \
     -x TORCH_NCCL_ASYNC_ERROR_HANDLING=1 \
     -x NCCL_TIMEOUT=3600 \
     python3 -u src/train.py \
