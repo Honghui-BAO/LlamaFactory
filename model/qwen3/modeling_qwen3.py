@@ -359,6 +359,11 @@ class Qwen3Attention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS.get(self.config._attn_implementation, eager_attention_forward)
 
+        if attention_mask is not None and attention_mask.dtype != query_states.dtype:
+            # For SDPA and other interfaces, mask should match query dtype if it's a float mask
+            # or be boolean. Given eager_attention_forward adds the mask, it's likely a float-style mask.
+            attention_mask = attention_mask.to(query_states.dtype)
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
