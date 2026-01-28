@@ -13,7 +13,10 @@
 # limitations under the License.
 """Qwen3 model configuration"""
 
-from transformers import PretrainedConfig
+try:
+    from transformers import PretrainedConfig
+except ImportError:
+    from transformers.configuration_utils import PretrainedConfig
 try:
     from transformers.modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 except ImportError:
@@ -23,7 +26,10 @@ except ImportError:
         rope_theta: float
     class RotaryEmbeddingConfigMixin:
         pass
-from transformers.utils import logging
+try:
+    from transformers.utils import logging
+except ImportError:
+    import logging
 
 def layer_type_validation(layer_types, num_hidden_layers):
     if layer_types is not None and len(layer_types) != num_hidden_layers:

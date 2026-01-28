@@ -24,15 +24,40 @@ from typing import Optional
 import torch
 from torch import nn
 
-from transformers import (
-    ACT2FN,
-    Cache,
-    DynamicCache,
-    GenerationMixin,
-    PreTrainedModel,
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-)
+try:
+    from transformers.activations import ACT2FN
+except ImportError:
+    try:
+        from transformers import ACT2FN
+    except ImportError:
+        ACT2FN = {}
+
+try:
+    from transformers.cache_utils import Cache, DynamicCache
+except ImportError:
+    try:
+        from transformers import Cache, DynamicCache
+    except ImportError:
+        class Cache: pass
+        class DynamicCache(Cache): pass
+
+try:
+    from transformers.generation import GenerationMixin
+except ImportError:
+    try:
+        from transformers import GenerationMixin
+    except ImportError:
+        class GenerationMixin: pass
+
+try:
+    from transformers.modeling_utils import PreTrainedModel
+except ImportError:
+    from transformers import PreTrainedModel
+
+try:
+    from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+except ImportError:
+    from transformers import BaseModelOutputWithPast, CausalLMOutputWithPast
 try:
     from transformers.integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 except ImportError:
