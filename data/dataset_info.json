@@ -741,5 +741,25 @@
       "prompt": "content"
     },
     "folder": "python"
+  },
+  "meta2sid_dataset": {
+    "file_name": "sum_rec/reproduce_rz/amazon_merged_sft_data_meta2identifier_v2.json",
+    "formatting": "alpaca"
+  },
+  "rec_dataset": {
+    "file_name": "sum_rec/reproduce_rz/amazon_merged_sft_data_rec_v2.json",
+    "formatting": "alpaca"
+  },
+  "rec_dataset_v2": {
+    "file_name": "sum_rec/amazon_merged_sft_data_rec_honghui_v2.json",
+    "formatting": "alpaca"
+  },
+  "ct_v0_meta2sid_dataset": {
+    "file_name": "sum_rec/amazon_merged_sft_data_meta2identifier_honghui.json",
+    "formatting": "alpaca"
+  },
+  "ct_v0_rec_dataset": {
+    "file_name": "sum_rec/amazon_merged_sft_data_rec_honghui.json",
+    "formatting": "alpaca"
   }
 }
