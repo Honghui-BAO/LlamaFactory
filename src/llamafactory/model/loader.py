@@ -190,6 +190,17 @@ def load_model(
         if model_args.mixture_of_depths == "load":
             model = load_mod_pretrained_model(**init_kwargs)
         else:
+            if type(config) in AutoModelForImageTextToText._model_mapping.keys():  # image-text
+                load_class = AutoModelForImageTextToText
+            elif type(config) in AutoModelForVision2Seq._model_mapping.keys():  # image-text
+                load_class = AutoModelForVision2Seq
+            elif type(config) in AutoModelForSeq2SeqLM._model_mapping.keys():  # audio-text
+                load_class = AutoModelForSeq2SeqLM
+            elif type(config) in AutoModelForTextToWaveform._model_mapping.keys():  # audio hack for qwen omni
+                load_class = AutoModelForTextToWaveform
+            else:
+                load_class = AutoModelForCausalLM
+
             if model_args.train_from_scratch:
                 model = load_class.from_config(config, trust_remote_code=model_args.trust_remote_code)
             else:
