@@ -30,7 +30,7 @@ deepspeed --num_gpus 8 \
     --stage sft \
     --model_name_or_path $LOCAL_MODEL_CODE \
     --do_train \
-    --dataset meta2sid_dataset,rec_dataset \
+    --dataset alpaca_zh_demo \
     --template qwen3 \
     --finetuning_type full \
     --output_dir $OUTPUT_DIR \
