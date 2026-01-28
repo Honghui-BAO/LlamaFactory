@@ -10,7 +10,11 @@ OUTPUT_DIR="/llm-reco-ssd-share/baohonghui/torchrec/SumRec/merge/ckpt/test_local
 export WANDB_DISABLED=true
 
 # 🚨 准备工作：
-# 为了让 transformers 能在这个目录下找到完整的模型，我们需要链接权重文件
+# 0. 清理动态加载缓存，确保加载的是最新的本地代码
+echo "Cleaning up local model cache..."
+rm -rf ~/.cache/huggingface/modules/transformers_modules/qwen3/
+
+# 1. 为了让 transformers 能在这个目录下找到完整的模型，我们需要链接权重文件
 echo "Checking weights and tokenizer files..."
 for file in $(ls $WEIGHTS_PATH); do
     if [[ ! -f "$LOCAL_MODEL_CODE/$file" ]] && [[ ! -L "$LOCAL_MODEL_CODE/$file" ]]; then
