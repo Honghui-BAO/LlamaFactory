@@ -76,9 +76,10 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
     Note: including inplace operation of model_args.
     """
     init_kwargs = _get_init_kwargs(model_args)
+    tokenizer_path = model_args.model_weight_path or model_args.model_name_or_path
     try:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path,
+            tokenizer_path,
             use_fast=model_args.use_fast_tokenizer,
             split_special_tokens=model_args.split_special_tokens,
             padding_side="right",
@@ -98,7 +99,7 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
 
     try:
         processor = AutoProcessor.from_pretrained(
-            model_args.model_name_or_path,
+            tokenizer_path,
             use_fast=model_args.use_fast_tokenizer,
             **init_kwargs,
         )
@@ -158,7 +159,7 @@ def load_model(
 
     if model is None and not lazy_load:
         init_kwargs["config"] = config
-        init_kwargs["pretrained_model_name_or_path"] = model_args.model_name_or_path
+        init_kwargs["pretrained_model_name_or_path"] = model_args.model_weight_path or model_args.model_name_or_path
         init_kwargs["torch_dtype"] = "auto"
 
         if model_args.mixture_of_depths == "load":

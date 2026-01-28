@@ -40,6 +40,12 @@ class BaseModelArguments:
             "help": "Path to the model weight or identifier from huggingface.co/models or modelscope.cn/models."
         },
     )
+    model_weight_path: str | None = field(
+        default=None,
+        metadata={
+            "help": "Path to the model weights. If provided, it will override model_name_or_path for weight loading."
+        },
+    )
     adapter_name_or_path: str | None = field(
         default=None,
         metadata={

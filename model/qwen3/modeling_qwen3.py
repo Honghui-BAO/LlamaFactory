@@ -599,18 +599,6 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
 
-        # ==============================================================
-        # 🧪 CUSTOM MODIFICATION TEMPLATE START
-        # ==============================================================
-        if getattr(self.config, "use_custom_logic", False):
-            # Dummy operation for verification
-            # You can inject your logic here, e.g., modifying hidden_states before lm_head
-            print("DEBUG: Applying custom logic to hidden_states")
-            hidden_states = hidden_states * 1.0  # replace with your modification
-        # ==============================================================
-        # 🧪 CUSTOM MODIFICATION TEMPLATE END
-        # ==============================================================
-
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -630,12 +618,62 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
 
 class Qwen3ForCausalLMCustom(Qwen3ForCausalLM):
     """
-    A custom wrapper for Qwen3ForCausalLM to avoid direct modification to the base class
-    if preferred, but here we've added the hook directly to the base class above as well.
+    Clean implementation via Inheritance.
+    All your modifications should happen here.
     """
-    def forward(self, *args, **kwargs):
-        # Implementation is inherited or overridden
-        return super().forward(*args, **kwargs)
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
+        # 1. Call base model logic
+        # We duplicate standard forward logic here slightly to get hidden_states access
+        # OR we can call self.model directly
+        outputs: BaseModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+
+        # ==============================================================
+        # 🧪 YOUR CUSTOM LOGIC HERE
+        # ==============================================================
+        if getattr(self.config, "use_custom_logic", False):
+            print("DEBUG: [Inherited Class] Applying custom logic to hidden_states")
+            # Example: hidden_states = hidden_states + some_feature
+            hidden_states = hidden_states * 1.0 
+        # ==============================================================
+
+        # 2. Compute logits using the head from base class
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 class Qwen3ForSequenceClassification(GenericForSequenceClassification, Qwen3PreTrainedModel):
