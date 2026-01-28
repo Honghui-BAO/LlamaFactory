@@ -67,20 +67,41 @@ except ImportError:
         return lambda x: x
     def use_kernelized_func(*args, **kwargs):
         return lambda x: x
-from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
-from transformers.modeling_layers import (
-    GenericForQuestionAnswering,
-    GenericForSequenceClassification,
-    GenericForTokenClassification,
-    GradientCheckpointingLayer,
-)
+try:
+    from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
+except ImportError:
+    def create_causal_mask(*args, **kwargs):
+        return kwargs.get("attention_mask", None)
+    def create_sliding_window_causal_mask(*args, **kwargs):
+        return kwargs.get("attention_mask", None)
+
+try:
+    from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
+except ImportError:
+    class FlashAttentionKwargs: pass
+
+try:
+    from transformers.modeling_layers import (
+        GenericForQuestionAnswering,
+        GenericForSequenceClassification,
+        GenericForTokenClassification,
+        GradientCheckpointingLayer,
+    )
+except ImportError:
+    class GenericForQuestionAnswering: pass
+    class GenericForSequenceClassification: pass
+    class GenericForTokenClassification: pass
+    class GradientCheckpointingLayer(nn.Module):
+        def __init__(self, *args, **kwargs): super().__init__()
 try:
     from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 except ImportError:
     ROPE_INIT_FUNCTIONS = {}
     def dynamic_rope_update(fun): return fun
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+try:
+    from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+except ImportError:
+    ALL_ATTENTION_FUNCTIONS = {}
 try:
     from transformers.processing_utils import Unpack
 except ImportError:
@@ -335,7 +356,7 @@ class Qwen3Attention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS.get(self.config._attn_implementation, eager_attention_forward)
 
         attn_output, attn_weights = attention_interface(
             self,
