@@ -165,16 +165,36 @@ def load_model(
         if model_args.mixture_of_depths == "load":
             model = load_mod_pretrained_model(**init_kwargs)
         else:
-            if type(config) in AutoModelForImageTextToText._model_mapping.keys():  # image-text
+            # Decide which class to use for loading
+            if type(config) in AutoModelForImageTextToText._model_mapping.keys():
                 load_class = AutoModelForImageTextToText
-            elif type(config) in AutoModelForVision2Seq._model_mapping.keys():  # image-text
+            elif type(config) in AutoModelForVision2Seq._model_mapping.keys():
                 load_class = AutoModelForVision2Seq
-            elif type(config) in AutoModelForSeq2SeqLM._model_mapping.keys():  # audio-text
+            elif type(config) in AutoModelForSeq2SeqLM._model_mapping.keys():
                 load_class = AutoModelForSeq2SeqLM
-            elif type(config) in AutoModelForTextToWaveform._model_mapping.keys():  # audio hack for qwen omni
+            elif type(config) in AutoModelForTextToWaveform._model_mapping.keys():
                 load_class = AutoModelForTextToWaveform
             else:
                 load_class = AutoModelForCausalLM
+
+            # [CRITICAL UPDATE FOR SEPARATE PATHS]
+            # If we are loading weights from a different path, we must handle custom code manually
+            # to avoid transformers looking for modeling_xxx.py in the weight directory.
+            if model_args.model_weight_path and hasattr(config, "auto_map"):
+                class_ref = config.auto_map.get("AutoModelForCausalLM")
+                if class_ref:
+                    try:
+                        module_name, class_name = class_ref.split(".")
+                        file_path = os.path.join(model_args.model_name_or_path, f"{module_name}.py")
+                        spec = importlib.util.spec_from_file_location(module_name, file_path)
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        load_class = getattr(module, class_name)
+                        # Clear auto_map so transformers doesn't try to look for the file on disk during from_pretrained
+                        config.auto_map = {}
+                        logger.info_rank0(f"Manually loaded custom class {class_name} from {file_path} to bypass weight path code check.")
+                    except Exception as e:
+                        logger.warning_rank0(f"Failed to manually load custom class {class_ref}: {e}")
 
             if model_args.train_from_scratch:
                 model = load_class.from_config(config, trust_remote_code=model_args.trust_remote_code)
