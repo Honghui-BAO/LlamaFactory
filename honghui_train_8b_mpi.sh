@@ -55,14 +55,14 @@ mpirun --allow-run-as-root \
     --finetuning_type full \
     --output_dir $output_dir \
     --overwrite_cache \
-    --save_total_limit 3 \
+    --save_total_limit 4 \
     --per_device_train_batch_size 2 \
     --gradient_accumulation_steps 8 \
     --lr_scheduler_type cosine \
     --logging_steps 1 \
-    --save_steps 200 \
+    --save_steps 100 \
     --learning_rate 1e-4 \
-    --num_train_epochs 3.0 \
+    --num_train_epochs 6.0 \
     --plot_loss \
     --bf16 \
     --dataloader_num_workers 0 \
