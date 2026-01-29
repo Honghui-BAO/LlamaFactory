@@ -76,34 +76,27 @@ class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
         hidden_states = outputs[0]
         
         # --- Reasoner Injection ---
-        # Logic: Only apply reasoning to positions where input_id is 176245
+        # Logic: Only apply reasoning to individual tokens with ID 176245
         reasoning_token_id = 176245
         combined_hidden_states = hidden_states
         
         if input_ids is not None:
             mask = (input_ids == reasoning_token_id)
             if mask.any():
-                # Pass through reasoner (contextual)
-                # Use attention_mask to avoid attending to padding tokens
-                src_key_padding_mask = ~attention_mask.bool() if attention_mask is not None else None
+                # Extract only the hidden states of interest (N, D)
+                tokens_hidden = hidden_states[mask]
                 
-                # Generate causal mask (triangular) to prevent seeing future tokens
-                seq_len = hidden_states.size(1)
-                causal_mask = torch.triu(
-                    torch.ones(seq_len, seq_len, device=hidden_states.device),
-                    diagonal=1
-                ).bool()
-                
-                reasoned_hidden_states = self.reasoner(
-                    hidden_states, 
-                    mask=causal_mask,
-                    src_key_padding_mask=src_key_padding_mask
-                )
+                # Pass each token through the reasoner as an independent "sequence of length 1"
+                # This prevents the reasoner from re-learning sequence-level information
+                # and focuses it on refining the single latent thought.
+                # Input shape for reasoner: (N, 1, D) where N is the number of tokens found
+                reasoned_output = self.reasoner(tokens_hidden.unsqueeze(1))
+                reasoned_hidden_states = reasoned_output.squeeze(1) # Back to (N, D)
                 
                 # Clone to avoid in-place mod and facilitate gradient flow
                 combined_hidden_states = hidden_states.clone()
                 # Average original and reasoned hidden states at specific positions
-                combined_hidden_states[mask] = (hidden_states[mask] + reasoned_hidden_states[mask]) / 2.0
+                combined_hidden_states[mask] = (tokens_hidden + reasoned_hidden_states) / 2.0
         # --------------------------
 
         logits = self.lm_head(combined_hidden_states)
