@@ -360,6 +360,13 @@ class Qwen3Attention(nn.Module):
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS.get(self.config._attn_implementation, eager_attention_forward)
+        
+        # Diagnostic print (only once per rank per script run)
+        if not hasattr(self, "_diag_printed"):
+            import os
+            if os.environ.get("LOCAL_RANK", "0") == "0":
+                print(f"INFO: [Layer {self.layer_idx}] Using attention interface: {attention_interface.__name__}")
+            self._diag_printed = True
 
         if attention_mask is not None:
             # 1. Expand 2D [B, S] to 4D [B, 1, 1, S] for broadcasting if necessary
