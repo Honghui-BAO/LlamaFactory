@@ -14,26 +14,44 @@ except ImportError:
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from .configuration_qwen_custom import Qwen3ReasonerConfig
 
+class GatedMLP(nn.Module):
+    def __init__(self, dim, ffn_size, depth=1, dropout=0.1):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        for _ in range(depth):
+            self.layers.append(nn.Sequential(
+                nn.Linear(dim, ffn_size),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(ffn_size, dim),
+                nn.Dropout(dropout)
+            ))
+        
+        # Gating mechanism
+        self.gate = nn.Linear(dim, dim)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        h = x
+        for layer in self.layers:
+            h = layer(h) + h  # Skip connection within MLP
+        
+        # Learned gate to decide how much info to keep
+        g = self.sigmoid(self.gate(x))
+        return g * h + (1 - g) * x
+
 class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
     config_class = Qwen3ReasonerConfig
 
     def __init__(self, config):
-        # We call the super init which sets up the base model and lm_head
         super().__init__(config)
         
-        # Add the reasoner component
-        nhead = getattr(config, "reasoner_nhead", None) or getattr(config, "num_attention_heads", 16)
-        ffn_size = getattr(config, "reasoner_ffn_size", 4096)
-        
-        self.reasoner = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                d_model=config.hidden_size,
-                nhead=nhead,
-                dim_feedforward=ffn_size,
-                dropout=getattr(config, "reasoner_dropout", 0.1),
-                batch_first=True,
-            ),
-            num_layers=getattr(config, "reasoner_layers", 1),
+        # Replace Transformer with Gated MLP for per-token refinement
+        self.reasoner = GatedMLP(
+            dim=config.hidden_size,
+            ffn_size=getattr(config, "reasoner_ffn_size", 4 * config.hidden_size),
+            depth=getattr(config, "reasoner_mlp_depth", 2),
+            dropout=getattr(config, "reasoner_dropout", 0.1)
         )
         
         self.post_init()
@@ -51,16 +69,12 @@ class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        r"""
-        Modified forward to include reasoner logic.
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # decoder outputs consists of (last_hidden_state, past_key_values, all_hidden_states, all_attentions)
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -75,43 +89,34 @@ class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
 
         hidden_states = outputs[0]
         
-        # --- Reasoner Injection ---
-        # Logic: Only apply reasoning to individual tokens with ID 176245
+        # --- Gated MLP Reasoner Injection ---
         reasoning_token_id = 176245
         combined_hidden_states = hidden_states
         
         if input_ids is not None:
             mask = (input_ids == reasoning_token_id)
             if mask.any():
-                # Extract only the hidden states of interest (N, D)
+                # Extract tokens of interest (N, D)
                 tokens_hidden = hidden_states[mask]
                 
-                # Pass each token through the reasoner as an independent "sequence of length 1"
-                # This prevents the reasoner from re-learning sequence-level information
-                # and focuses it on refining the single latent thought.
-                # Input shape for reasoner: (N, 1, D) where N is the number of tokens found
-                reasoned_output = self.reasoner(tokens_hidden.unsqueeze(1))
-                reasoned_hidden_states = reasoned_output.squeeze(1) # Back to (N, D)
+                # Apply Gated MLP refinement
+                reasoned_hidden_states = self.reasoner(tokens_hidden)
                 
-                # Clone to avoid in-place mod and facilitate gradient flow
+                # Clone and substitute
                 combined_hidden_states = hidden_states.clone()
-                # Average original and reasoned hidden states at specific positions
-                combined_hidden_states[mask] = (tokens_hidden + reasoned_hidden_states) / 2.0
-        # --------------------------
+                combined_hidden_states[mask] = reasoned_hidden_states
+        # ------------------------------------
 
         logits = self.lm_head(combined_hidden_states)
         logits = logits.float()
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
             loss_fct = nn.CrossEntropyLoss()
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
