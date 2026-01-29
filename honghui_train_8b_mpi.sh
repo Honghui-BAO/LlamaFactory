@@ -1,20 +1,24 @@
 #!/bin/bash
 
+# Default Paths (Override via command line arguments)
+# Usage: ./honghui_train_8b_mpi.sh [model_path] [output_dir]
+model_path=${1:-"/llm-reco-ssd-share/baohonghui/ckpt/converted"}
+output_dir=${2:-"/llm-reco-ssd-share/baohonghui/Reference/torchrec/SumRec/merge/ckpt/rmdr_v15_0_single_avg_mpi_v2_test"}
+
 # Configuration
 HOSTFILE="/etc/mpi/hostfile"
 MASTER_ADDR=$(hostname -I | awk '{print $1}')
 MASTER_PORT=12345
 
-# Paths (Updated per user request)
-model_path=/llm-reco-ssd-share/baohonghui/ckpt/converted
-output_dir=/llm-reco-ssd-share/baohonghui/Reference/torchrec/SumRec/merge/ckpt/rmdr_v15_0_single_avg_mpi_v2_test
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
 # Print Configuration
 echo "--------------------------------------"
-echo "LlamaFactory MPI Training Launch (128 Ranks)"
+echo "LlamaFactory MPI Training Launch"
 echo "--------------------------------------"
-echo "MASTER: $MASTER_ADDR:$MASTER_PORT"
-echo "OUTPUT: $output_dir"
+echo "MODEL PATH: $model_path"
+echo "OUTPUT DIR: $output_dir"
+echo "MASTER    : $MASTER_ADDR:$MASTER_PORT"
 echo "--------------------------------------"
 
 # Multi-Node Launch using mpirun
