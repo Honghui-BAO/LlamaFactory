@@ -86,7 +86,19 @@ class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
                 # Pass through reasoner (contextual)
                 # Use attention_mask to avoid attending to padding tokens
                 src_key_padding_mask = ~attention_mask.bool() if attention_mask is not None else None
-                reasoned_hidden_states = self.reasoner(hidden_states, src_key_padding_mask=src_key_padding_mask)
+                
+                # Generate causal mask (triangular) to prevent seeing future tokens
+                seq_len = hidden_states.size(1)
+                causal_mask = torch.triu(
+                    torch.ones(seq_len, seq_len, device=hidden_states.device),
+                    diagonal=1
+                ).bool()
+                
+                reasoned_hidden_states = self.reasoner(
+                    hidden_states, 
+                    mask=causal_mask,
+                    src_key_padding_mask=src_key_padding_mask
+                )
                 
                 # Clone to avoid in-place mod and facilitate gradient flow
                 combined_hidden_states = hidden_states.clone()
