@@ -32,6 +32,12 @@ class GatedMLP(nn.Module):
         self.gate = nn.Linear(dim, dim)
         self.sigmoid = nn.Sigmoid()
 
+        # Stable Initialization:
+        # 1. Negative bias makes sigmoid(gate(x)) close to 0 initially.
+        nn.init.constant_(self.gate.bias, -4.0)
+        # 2. Small weight gain ensuring minimal interference during warmup.
+        nn.init.xavier_uniform_(self.gate.weight, gain=0.01)
+
     def forward(self, x):
         h = x
         # Outer Loop: Recurrently apply the same layers

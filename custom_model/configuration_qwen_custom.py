@@ -11,7 +11,7 @@ class Qwen3ReasonerConfig(Qwen3Config):
     def __init__(
         self,
         reasoner_mlp_depth=2,
-        reasoner_steps=1,
+        reasoner_steps=4,
         reasoner_ffn_size=4096,
         reasoner_dropout=0.1,
         **kwargs
