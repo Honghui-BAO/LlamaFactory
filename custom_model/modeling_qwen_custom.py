@@ -76,8 +76,22 @@ class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
         hidden_states = outputs[0]
         
         # --- Reasoner Injection ---
-        reasoned_hidden_states = self.reasoner(hidden_states)
-        combined_hidden_states = (hidden_states + reasoned_hidden_states) / 2.0
+        # Logic: Only apply reasoning to positions where input_id is 176245
+        reasoning_token_id = 176245
+        combined_hidden_states = hidden_states
+        
+        if input_ids is not None:
+            mask = (input_ids == reasoning_token_id)
+            if mask.any():
+                # Pass through reasoner (contextual)
+                # Use attention_mask to avoid attending to padding tokens
+                src_key_padding_mask = ~attention_mask.bool() if attention_mask is not None else None
+                reasoned_hidden_states = self.reasoner(hidden_states, src_key_padding_mask=src_key_padding_mask)
+                
+                # Clone to avoid in-place mod and facilitate gradient flow
+                combined_hidden_states = hidden_states.clone()
+                # Average original and reasoned hidden states at specific positions
+                combined_hidden_states[mask] = (hidden_states[mask] + reasoned_hidden_states[mask]) / 2.0
         # --------------------------
 
         logits = self.lm_head(combined_hidden_states)
