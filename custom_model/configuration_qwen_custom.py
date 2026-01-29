@@ -10,7 +10,7 @@ class Qwen3ReasonerConfig(Qwen3Config):
     
     def __init__(
         self,
-        reasoner_nhead=12,
+        reasoner_nhead=None,
         reasoner_ffn_size=4096,
         reasoner_layers=1,
         reasoner_dropout=0.1,

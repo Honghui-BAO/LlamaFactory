@@ -22,11 +22,14 @@ class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
         super().__init__(config)
         
         # Add the reasoner component
+        nhead = getattr(config, "reasoner_nhead", None) or getattr(config, "num_attention_heads", 16)
+        ffn_size = getattr(config, "reasoner_ffn_size", 4096)
+        
         self.reasoner = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 d_model=config.hidden_size,
-                nhead=getattr(config, "reasoner_nhead", 12),
-                dim_feedforward=getattr(config, "reasoner_ffn_size", 4096),
+                nhead=nhead,
+                dim_feedforward=ffn_size,
                 dropout=getattr(config, "reasoner_dropout", 0.1),
                 batch_first=True,
             ),
