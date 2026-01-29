@@ -46,7 +46,7 @@ mpirun --allow-run-as-root \
     --model_name_or_path $model_path \
     --do_train \
     --trust_remote_code True \
-    --dataset alpaca_zh_demo \
+    --dataset meta2sid_dataset,rec_dataset \
     --template qwen3 \
     --finetuning_type full \
     --output_dir $output_dir \
