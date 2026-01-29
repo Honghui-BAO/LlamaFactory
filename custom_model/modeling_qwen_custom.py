@@ -15,8 +15,9 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 from .configuration_qwen_custom import Qwen3ReasonerConfig
 
 class GatedMLP(nn.Module):
-    def __init__(self, dim, ffn_size, depth=1, dropout=0.1):
+    def __init__(self, dim, ffn_size, depth=1, steps=1, dropout=0.1):
         super().__init__()
+        self.steps = steps
         self.layers = nn.ModuleList()
         for _ in range(depth):
             self.layers.append(nn.Sequential(
@@ -33,10 +34,13 @@ class GatedMLP(nn.Module):
 
     def forward(self, x):
         h = x
-        for layer in self.layers:
-            h = layer(h) + h  # Skip connection within MLP
+        # Outer Loop: Recurrently apply the same layers
+        for _ in range(self.steps):
+            # Inner Loop: Sequential layers within each step
+            for layer in self.layers:
+                h = layer(h) + h  # Skip connection
         
-        # Learned gate to decide how much info to keep
+        # Learned gate to decide how much info to keep from the multi-step reasoning
         g = self.sigmoid(self.gate(x))
         return g * h + (1 - g) * x
 
@@ -51,6 +55,7 @@ class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
             dim=config.hidden_size,
             ffn_size=getattr(config, "reasoner_ffn_size", 4 * config.hidden_size),
             depth=getattr(config, "reasoner_mlp_depth", 2),
+            steps=getattr(config, "reasoner_steps", 1),
             dropout=getattr(config, "reasoner_dropout", 0.1)
         )
         
