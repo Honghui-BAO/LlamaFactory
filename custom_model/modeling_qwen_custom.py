@@ -65,7 +65,38 @@ class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
             dropout=getattr(config, "reasoner_dropout", 0.1)
         )
         
+        # Stratgy: Layer-wise Injection via Hook
+        # This ensures compatibility with rotary embeddings, KV cache, and gradient checkpointing.
+        self.inject_layer = getattr(config, "reasoner_injection_layer", 24)
+        self.reasoning_token_id = 176245
+        
+        # Register hook on the specific layer
+        if self.inject_layer < len(self.model.layers):
+            self.model.layers[self.inject_layer].register_forward_pre_hook(self._reasoner_pre_hook)
+        
         self.post_init()
+
+    def _reasoner_pre_hook(self, module, args):
+        # args[0] is hidden_states
+        hidden_states = args[0]
+        input_ids = getattr(self, "_current_input_ids", None)
+        
+        if input_ids is not None:
+            mask = (input_ids == self.reasoning_token_id)
+            if mask.any():
+                # Apply Reasoner refinement
+                # We must handle the case where hidden_states might be (Batch, Seq, Dim)
+                # but mask might be (Batch, Seq). 
+                # PyTorch indexing handles this: hidden_states[mask] returns (N, Dim)
+                tokens_hidden = hidden_states[mask]
+                reasoned_hidden_states = self.reasoner(tokens_hidden)
+                
+                # Update in-place to ensure the layer receives modified inputs
+                # Note: We use .clone() logic if we want to be safest, but in-place is usually fine for pre-hooks 
+                # unless gradient checkpointing is extremely strict.
+                hidden_states[mask] = reasoned_hidden_states
+        
+        return args
 
     def forward(
         self,
@@ -81,99 +112,25 @@ class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        # Temporarily store input_ids for the hook to use
+        self._current_input_ids = input_ids
+        
+        # Call the standard forward pass
+        outputs = super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            labels=labels,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            **kwargs,
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # IMPORTANT: To avoid deep recursion or breaking internal logic, we manually execute the layers 
-        # to perform injection at a specific middle layer.
         
-        # 1. Standard Pre-processing (Embeddings)
-        # Note: We rely on the internal self.model for standard utilities
-        if inputs_embeds is None:
-            inputs_embeds = self.model.embed_tokens(input_ids)
+        # Cleanup
+        self._current_input_ids = None
         
-        hidden_states = inputs_embeds
-        
-        # 2. Preparation (similar to Qwen3Model.forward)
-        # We try to use the model's internal setup if possible, or just call manually.
-        # For simplicity and stability, we execute the layers loop here.
-        
-        # Handle position_ids and attention_mask
-        if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(0, hidden_states.shape[1], device=device).unsqueeze(0)
-        
-        # 3. Layer Loop with Injection
-        reasoning_token_id = 176245
-        # We can configure which layer to inject at. Default to middle-deep (e.g., 24/32)
-        inject_layer = getattr(self.config, "reasoner_injection_layer", 24)
-        
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
-
-        for i, decoder_layer in enumerate(self.model.layers):
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            # Perform Injection at the start of chosen layer or during hidden state flow
-            if i == inject_layer and input_ids is not None:
-                mask = (input_ids == reasoning_token_id)
-                if mask.any():
-                    # We inject AFTER the previous layer's output but BEFORE the next layer starts
-                    # This way, layer[inject_layer] and onwards "see" the refined state.
-                    tokens_hidden = hidden_states[mask]
-                    reasoned_hidden_states = self.reasoner(tokens_hidden)
-                    hidden_states = hidden_states.clone() # Avoid in-place issues
-                    hidden_states[mask] = reasoned_hidden_states
-
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_values[i] if past_key_values is not None else None,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                **kwargs,
-            )
-
-            hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache += (layer_outputs[1],)
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[2 if use_cache else 1],)
-
-        hidden_states = self.model.norm(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        logits = self.lm_head(hidden_states)
-        logits = logits.float()
-
-        loss = None
-        if labels is not None:
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            loss_fct = nn.CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
-
-        if not return_dict:
-            output = (logits,) + (next_decoder_cache, all_hidden_states, all_self_attns)
-            return (loss,) + output if loss is not None else output
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=next_decoder_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
+        return outputs
