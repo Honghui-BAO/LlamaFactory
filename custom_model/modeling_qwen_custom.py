@@ -50,50 +50,82 @@ class GatedMLP(nn.Module):
         g = self.sigmoid(self.gate(x))
         return g * h + (1 - g) * x
 
+class GatedMoE(nn.Module):
+    def __init__(self, dim, ffn_size, num_domains=10, depth=1, steps=1, dropout=0.1):
+        super().__init__()
+        self.shared_expert = GatedMLP(dim, ffn_size, depth, steps, dropout)
+        self.domain_experts = nn.ModuleList([
+            GatedMLP(dim, ffn_size, depth, steps, dropout) for _ in range(num_domains)
+        ])
+        
+    def forward(self, x, domain_ids):
+        # x: (N, D), domain_ids: (N,)
+        shared_out = self.shared_expert(x)
+        
+        # Sum shared expert and domain-specific expert output
+        final_out = shared_out
+        
+        if domain_ids is not None:
+            unique_domains = domain_ids.unique()
+            for d_id in unique_domains:
+                if 0 <= d_id < len(self.domain_experts):
+                    mask = (domain_ids == d_id)
+                    # Add domain specific contribution
+                    final_out[mask] = final_out[mask] + self.domain_experts[d_id](x[mask])
+        
+        return final_out
+
 class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
     config_class = Qwen3ReasonerConfig
 
     def __init__(self, config):
         super().__init__(config)
         
-        # Replace Transformer with Gated MLP for per-token refinement
-        self.reasoner = GatedMLP(
+        # Replace single Gated MLP with MoE Reasoner
+        self.reasoner = GatedMoE(
             dim=config.hidden_size,
             ffn_size=getattr(config, "reasoner_ffn_size", 4 * config.hidden_size),
+            num_domains=getattr(config, "num_domains", 10),
             depth=getattr(config, "reasoner_mlp_depth", 2),
             steps=getattr(config, "reasoner_steps", 1),
             dropout=getattr(config, "reasoner_dropout", 0.1)
         )
         
         # Stratgy: Layer-wise Injection via Hook
-        # This ensures compatibility with rotary embeddings, KV cache, and gradient checkpointing.
         self.inject_layer = getattr(config, "reasoner_injection_layer", 24)
         self.reasoning_token_id = 176245
         
-        # Register hook on the specific layer
         if self.inject_layer < len(self.model.layers):
             self.model.layers[self.inject_layer].register_forward_pre_hook(self._reasoner_pre_hook)
         
         self.post_init()
 
     def _reasoner_pre_hook(self, module, args):
-        # args[0] is hidden_states
         hidden_states = args[0]
         input_ids = getattr(self, "_current_input_ids", None)
+        domain_ids = getattr(self, "_current_domain_ids", None)
         
         if input_ids is not None:
             mask = (input_ids == self.reasoning_token_id)
             if mask.any():
-                # Apply Reasoner refinement
-                # We must handle the case where hidden_states might be (Batch, Seq, Dim)
-                # but mask might be (Batch, Seq). 
-                # PyTorch indexing handles this: hidden_states[mask] returns (N, Dim)
                 tokens_hidden = hidden_states[mask]
-                reasoned_hidden_states = self.reasoner(tokens_hidden)
                 
-                # Update in-place to ensure the layer receives modified inputs
-                # Note: We use .clone() logic if we want to be safest, but in-place is usually fine for pre-hooks 
-                # unless gradient checkpointing is extremely strict.
+                # Prepare domain_ids for the reasoned tokens
+                reasoning_domain_ids = None
+                if domain_ids is not None:
+                    # Case 1: domain_ids is (Batch, Seq) - token level
+                    if domain_ids.dim() == 2:
+                        reasoning_domain_ids = domain_ids[mask]
+                    # Case 2: domain_ids is (Batch,) or (Batch, 1) - sequence level
+                    elif domain_ids.dim() == 1:
+                        # Expand to match token mask (Batch, Seq) then index
+                        expanded_domain_ids = domain_ids.unsqueeze(1).expand_as(mask)
+                        reasoning_domain_ids = expanded_domain_ids[mask]
+                    elif domain_ids.dim() == 0:
+                        # Single scalar (Batch=1 or global)
+                        reasoning_domain_ids = domain_ids.expand(tokens_hidden.size(0))
+
+                reasoned_hidden_states = self.reasoner(tokens_hidden, reasoning_domain_ids)
                 hidden_states[mask] = reasoned_hidden_states
         
         return args
@@ -110,12 +142,13 @@ class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        domain_ids: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        # Temporarily store input_ids for the hook to use
+        # Store input_ids and domain_ids for the hook
         self._current_input_ids = input_ids
+        self._current_domain_ids = domain_ids
         
-        # Call the standard forward pass
         outputs = super().forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -130,7 +163,7 @@ class Qwen3ForCausalLMWithReasoner(Qwen3ForCausalLM):
             **kwargs,
         )
         
-        # Cleanup
         self._current_input_ids = None
+        self._current_domain_ids = None
         
         return outputs

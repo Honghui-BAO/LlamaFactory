@@ -46,19 +46,43 @@ def accuracy_reward_func(completions, test_ground_truth_identifier, **kwargs) ->
             rewards.append(0.0)
     return rewards
 
+# --- Domain Mapping ---
+DOMAIN_MAPPING_V2_PATH = "user_id2domain_id.json"
+user_id2domain_id = {}
+if os.path.exists(DOMAIN_MAPPING_V2_PATH):
+    with open(DOMAIN_MAPPING_V2_PATH, "r") as f:
+        user_id2domain_id = json.load(f)
+    print(f"Loaded domain mapping for {len(user_id2domain_id)} users.")
+else:
+    print(f"Warning: {DOMAIN_MAPPING_V2_PATH} not found. MoE Reasoner will use Shared Expert only.")
+
 # --- Data Preparation ---
 
 def prepare_dataset(path):
     dataset = load_dataset("json", data_files=path, split="train")
-    # GRPOTrainer expects 'prompt' and standard reward columns
-    # We map 'input' to 'prompt' and keep 'test_ground_truth_identifier' for the accuracy reward
+    
     def map_fn(examples):
-        # Construct the prompt as LlamaFactory does (Instruction + Input)
-        prompts = [f"{instr}\n{inp}" for instr, inp in zip(examples["instruction"], examples["input"])]
+        prompts = []
+        domain_ids_list = []
+        
+        for i in range(len(examples["instruction"])):
+            instr = examples["instruction"][i]
+            inp = examples["input"][i]
+            metadata = examples["metadata"][i]
+            
+            # Construct standard prompt
+            prompts.append(f"{instr}\n{inp}")
+            
+            # Lookup domain_id dynamically
+            u_id = str(metadata.get("user_id", ""))
+            domain_ids_list.append(user_id2domain_id.get(u_id, -1)) # -1 defaults to shared only
+            
         return {
             "prompt": prompts,
+            "domain_ids": domain_ids_list,
             "test_ground_truth_identifier": examples["test_ground_truth_identifier"]
         }
+    
     return dataset.map(map_fn, batched=True, remove_columns=dataset.column_names)
 
 # --- Training Script ---
