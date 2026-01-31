@@ -47,7 +47,7 @@ def accuracy_reward_func(completions, test_ground_truth_identifier, **kwargs) ->
     return rewards
 
 # --- Domain Mapping ---
-DOMAIN_MAPPING_V2_PATH = "user_id2domain_id.json"
+DOMAIN_MAPPING_V2_PATH = "/llm-reco-ssd-share/baohonghui/LlamaFactory/user_id2domain_id.json"
 user_id2domain_id = {}
 if os.path.exists(DOMAIN_MAPPING_V2_PATH):
     with open(DOMAIN_MAPPING_V2_PATH, "r") as f:

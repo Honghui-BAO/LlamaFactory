@@ -44,6 +44,7 @@ if __name__ == "__main__":
     print(f"Built mapping for {len(mapping)} users.")
     
     # Save for training script usage
-    with open("user_id2domain_id.json", "w") as f:
+    OUTPUT_PATH = "/llm-reco-ssd-share/baohonghui/LlamaFactory/user_id2domain_id.json"
+    with open(OUTPUT_PATH, "w") as f:
         json.dump(mapping, f)
-    print("Saved to user_id2domain_id.json")
+    print(f"Saved to {OUTPUT_PATH}")
